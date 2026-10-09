@@ -160,7 +160,9 @@ class Services extends Command
         $documentation = $documentation ? $documentation.'?utm_source=coolify.io' : 'https://coolify.io/docs';
 
         // Replace SERVICE_URL with SERVICE_FQDN in the content
-        $modifiedContent = str_replace('SERVICE_URL', 'SERVICE_FQDN', $content);
+        $modifiedContent = str($data->get('preserve_service_url'))->toBoolean()
+            ? $content
+            : str_replace('SERVICE_URL', 'SERVICE_FQDN', $content);
 
         $json = Yaml::parse($modifiedContent);
         $compose = base64_encode(Yaml::dump($json, 10, 2));
@@ -187,7 +189,9 @@ class Services extends Command
         if ($envFile = $data->get('env_file')) {
             $envFileContent = file_get_contents(base_path("templates/compose/$envFile"));
             // Also replace SERVICE_URL with SERVICE_FQDN in env file content
-            $modifiedEnvContent = str_replace('SERVICE_URL', 'SERVICE_FQDN', $envFileContent);
+            $modifiedEnvContent = str($data->get('preserve_service_url'))->toBoolean()
+                ? $envFileContent
+                : str_replace('SERVICE_URL', 'SERVICE_FQDN', $envFileContent);
             $payload['envs'] = base64_encode($modifiedEnvContent);
         }
 
@@ -238,7 +242,9 @@ class Services extends Command
         $documentation = $documentation ? $documentation.'?utm_source=coolify.io' : 'https://coolify.io/docs';
 
         // Replace SERVICE_URL with SERVICE_FQDN in the content
-        $modifiedContent = str_replace('SERVICE_URL', 'SERVICE_FQDN', $content);
+        $modifiedContent = str($data->get('preserve_service_url'))->toBoolean()
+            ? $content
+            : str_replace('SERVICE_URL', 'SERVICE_FQDN', $content);
 
         $json = Yaml::parse($modifiedContent);
         $compose = Yaml::dump($json, 10, 2); // Not base64 encoded
@@ -265,7 +271,9 @@ class Services extends Command
         if ($envFile = $data->get('env_file')) {
             $envFileContent = file_get_contents(base_path("templates/compose/$envFile"));
             // Also replace SERVICE_URL with SERVICE_FQDN in env file content (not base64 encoded)
-            $modifiedEnvContent = str_replace('SERVICE_URL', 'SERVICE_FQDN', $envFileContent);
+            $modifiedEnvContent = str($data->get('preserve_service_url'))->toBoolean()
+                ? $envFileContent
+                : str_replace('SERVICE_URL', 'SERVICE_FQDN', $envFileContent);
             $payload['envs'] = $modifiedEnvContent;
         }
 

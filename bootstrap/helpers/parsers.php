@@ -2325,6 +2325,10 @@ function serviceParser(Service $resource): Collection
                 }
             }
         }
+        if ($savedService instanceof ServiceApplication && $savedService->wasRecentlyCreated && array_key_exists('x-coolify-strip-prefix', $service)) {
+            $savedService->is_stripprefix_enabled = (bool) $service['x-coolify-strip-prefix'];
+            $savedService->save();
+        }
         // Update image if it changed
         if ($savedService->image !== $image) {
             $savedService->image = $image;
@@ -2475,8 +2479,12 @@ function serviceParser(Service $resource): Collection
                 // Strip scheme for environment variable values
                 $fqdnValueForEnv = str($fqdn)->after('://')->value();
 
+                $paths = collect();
                 if ($value && get_class($value) === Stringable::class && $value->startsWith('/')) {
-                    $path = $value->value();
+                    $paths = data_get($yaml, 'x-coolify-path-routing', false)
+                        ? $value->explode(',')->map(fn ($path) => trim($path))
+                        : collect([$value->value()]);
+                    $path = $paths->first();
                     if ($path !== '/') {
                         // Only add path if it's not already present (prevents duplication on subsequent parse() calls)
                         if (! str($fqdn)->endsWith($path)) {
@@ -2491,19 +2499,18 @@ function serviceParser(Service $resource): Collection
                     }
                 }
 
-                $urlWithPort = $url;
-                $fqdnValueForEnvWithPort = $fqdnValueForEnv;
-                if ($fqdn && $port) {
-                    $fqdnValueForEnvWithPort = "$fqdnValueForEnv:$port";
-                }
-                if ($url && $port) {
-                    $urlWithPort = "$url:$port";
-                }
+                $urlPair = serviceEnvironmentUrlPair($url, $port, originOnly: (bool) data_get($yaml, 'x-coolify-path-routing', false));
+                $urlWithPort = $urlPair['routed'];
+                $fqdnValueForEnvWithPort = str($urlWithPort)->after('://')->value();
+                $baseUrl = $urlPair['base'];
+                $baseFqdn = str($baseUrl)->after('://')->value();
 
                 // Only save fqdn to ServiceApplication, not ServiceDatabase
                 if ($isServiceApplication && is_null($savedService->fqdn)) {
                     // Save URL (with scheme) to database, not FQDN
-                    $savedService->fqdn = $url;
+                    $savedService->fqdn = $paths->count() > 1
+                        ? $paths->map(fn ($path) => $baseUrl.($path === '/' ? '' : $path))->implode(',')
+                        : $url;
                     $savedService->save();
                 }
 
@@ -2514,7 +2521,7 @@ function serviceParser(Service $resource): Collection
                     'resourceable_type' => get_class($resource),
                     'resourceable_id' => $resource->id,
                 ], [
-                    'value' => $fqdnValueForEnv,
+                    'value' => $baseFqdn,
                     'is_preview' => false,
                     'comment' => $envComments[$fqdnKey] ?? null,
                 ]);
@@ -2525,7 +2532,7 @@ function serviceParser(Service $resource): Collection
                     'resourceable_type' => get_class($resource),
                     'resourceable_id' => $resource->id,
                 ], [
-                    'value' => $url,
+                    'value' => $baseUrl,
                     'is_preview' => false,
                     'comment' => $envComments[$urlKey] ?? null,
                 ]);

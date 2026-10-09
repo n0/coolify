@@ -261,6 +261,26 @@ function getFilesystemVolumesFromServer(ServiceApplication|ServiceDatabase|Appli
         return handleError($e);
     }
 }
+/**
+ * @return array{base: string, routed: string}
+ */
+function serviceEnvironmentUrlPair(string $value, ?string $port = null, bool $originOnly = false): array
+{
+    $hasScheme = str_contains($value, '://');
+    $url = Url::fromString($hasScheme ? $value : 'https://'.$value);
+    $baseUrl = $url->withPort(null);
+    if ($originOnly) {
+        $baseUrl = $baseUrl->withPath('')->withQuery('')->withFragment('');
+    }
+    $base = (string) $baseUrl;
+    $routed = (string) $url->withPort($port ?? $url->getPort());
+
+    return [
+        'base' => $hasScheme ? $base : str($base)->after('://')->value(),
+        'routed' => $hasScheme ? $routed : str($routed)->after('://')->value(),
+    ];
+}
+
 function updateCompose(ServiceApplication|ServiceDatabase $resource)
 {
     try {
@@ -383,8 +403,9 @@ function updateCompose(ServiceApplication|ServiceDatabase $resource)
             $port = $url->getPort();
 
             // Same helpers as application/service parsers (COOLIFY_URL / COOLIFY_FQDN).
-            $urlValue = getFqdnWithoutPort($firstFqdn);
-            $fqdnValue = getHostWithoutPort($firstFqdn);
+            $originOnly = (bool) data_get($dockerCompose, 'x-coolify-path-routing', false);
+            $urlValue = serviceEnvironmentUrlPair($firstFqdn, originOnly: $originOnly)['base'];
+            $fqdnValue = str($urlValue)->after('://')->value();
 
             // For each service name found in template, create BOTH SERVICE_URL and SERVICE_FQDN pairs
             foreach ($serviceNamesToProcess as $serviceInfo) {
@@ -417,8 +438,8 @@ function updateCompose(ServiceApplication|ServiceDatabase $resource)
                 }
 
                 foreach ($allPorts as $portNum) {
-                    $urlWithPort = $urlValue.':'.$portNum;
-                    $fqdnWithPort = $fqdnValue.':'.$portNum;
+                    $urlWithPort = serviceEnvironmentUrlPair($firstFqdn, (string) $portNum)['routed'];
+                    $fqdnWithPort = str($urlWithPort)->after('://')->value();
 
                     $resource->service->environment_variables()->updateOrCreate([
                         'resourceable_type' => Service::class,
